@@ -56,4 +56,4 @@ def home():
 def recommend(q: str):
     results = get_recommendations(q)
     return {"query": q, "results": results}
-#Run with: uvicorn recommendation_api:app --host 0.0.0.0 --port $PORT
+#Run with: uvicorn Code_Deploy:app --host 0.0.0.0 --port 8000
