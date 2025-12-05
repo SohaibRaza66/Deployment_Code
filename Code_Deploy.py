@@ -15,35 +15,42 @@ vectorizer = TfidfVectorizer(stop_words="english")
 tfidf_matrix = vectorizer.fit_transform(df["combined_text"])
 
 
+def compute_claps_numeric():
+    # Convert claps like "1.2K" or "500" into numbers
+    return (
+        df["Claps"]
+        .str.replace("K", "000", regex=False)
+        .str.replace(".", "", regex=False)
+        .apply(pd.to_numeric, errors="coerce")
+        .fillna(0)
+    )
+
+
+df["Claps_Num"] = compute_claps_numeric()
+
+
 def get_recommendations(query_text, top_n=10):
-    # Convert input text/keywords into vector
+    # Convert input text into vector
     query_vec = vectorizer.transform([query_text])
 
     # Compute cosine similarity
     similarities = cosine_similarity(query_vec, tfidf_matrix).flatten()
 
-    # Sort by similarity + claps
     df["similarity"] = similarities
 
-    # Convert claps to numeric
-    df["Claps_Num"] = df["Claps"].replace("K", "000", regex=True)
-    df["Claps_Num"] = pd.to_numeric(df["Claps_Num"], errors="coerce").fillna(0)
-
-    # Sort by:
-    # 1) Highest similarity
-    # 2) Highest claps
+    # Sort by similarity first, then by claps
     results = df.sort_values(
         by=["similarity", "Claps_Num"], ascending=False
     ).head(top_n)
 
-    # Return list of dicts
     return [
         {
             "title": row["Title"],
             "url": row["URL"],
-            "claps": row["Claps"]
+            "claps": row["Claps"],
+            "similarity_score": float(row["similarity"])
         }
-        for i, row in results.iterrows()
+        for _, row in results.iterrows()
     ]
 
 
@@ -56,4 +63,23 @@ def home():
 def recommend(q: str):
     results = get_recommendations(q)
     return {"query": q, "results": results}
-#Run with: uvicorn Code_Deploy:app --host 0.0.0.0 --port 8000
+
+
+# 🔥 NEW ENDPOINT: Top 10 most-clapped similar articles
+@app.get("/top_clapped_similar")
+def top_clapped_similar(q: str):
+    results = get_recommendations(q, top_n=10)
+
+    # Sort only by claps_num to return the top clapped ones among the similar results
+    sorted_by_claps = sorted(
+        results, key=lambda x: float(x["claps"].replace("K", "000")), reverse=True
+    )
+
+    return {
+        "query": q,
+        "top_clapped_similar_articles": sorted_by_claps
+    }
+
+
+# Run with:
+# uvicorn Code_Deploy:app --host 0.0.0.0 --port 8000
